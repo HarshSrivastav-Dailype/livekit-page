@@ -183,15 +183,15 @@
         
         <!-- Agent Selection -->
         <div class="agent-selector" id="agentSelector">
-            <button class="agent-button" data-agent="support-agent">
+            <button class="agent-button" data-agent="additional-document-agent">
                 <strong>👨‍💼 Additional Documents</strong>
                 <span>Technical help and assistance</span>
             </button>
-            <button class="agent-button" data-agent="sales-agent">
-                <strong>💼 Fresh Loant</strong>
+            <button class="agent-button" data-agent="fresh-loan-agent">
+                <strong>💼 Fresh Loan</strong>
                 <span>Product info and pricing</span>
             </button>
-            <button class="agent-button" data-agent="scheduling-agent">
+            <button class="agent-button" data-agent="vpd-agent">
                 <strong>📅 Video KYC</strong>
                 <span>Book appointments</span>
             </button>
@@ -229,7 +229,7 @@
         import { Room, RoomEvent, Track } from 'https://cdn.jsdelivr.net/npm/livekit-client@2.5.0/+esm';
         
         // Configuration
-        const BACKEND_URL = 'http://localhost:8088';
+        const BACKEND_URL = 'http://13.203.175.232:8082';
         
         // Global state
         let room = null;

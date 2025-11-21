@@ -304,6 +304,13 @@
         <div class="audio-indicator" id="audioIndicator" style="display:none;">
             🎤 Microphone: <span id="micStatus">Initializing...</span><br>
             🔊 Agent Audio: <span id="agentAudioStatus">Waiting...</span>
+            <div class="sound-wave" id="soundWave" style="display:none;">
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+            </div>
         </div>
         
         <!-- Control Buttons -->
@@ -368,7 +375,31 @@
             log(`Connecting as: ${participantIdentity}`, 'info');
             
             try {
-                // 1. Request microphone permission first
+                // 1. Extract last 10 digits from participant identity
+                const phoneNumber = participantIdentity.replace(/\D/g, '').slice(-10);
+                
+                if (phoneNumber.length !== 10) {
+                    throw new Error('Please enter a valid phone number (at least 10 digits)');
+                }
+                
+                log(`Extracted phone number: ${phoneNumber}`, 'info');
+                
+                // 2. Call prepare-call API first
+                log('Preparing call...', 'info');
+                const prepareResponse = await fetch(`${BACKEND_URL}/prepare-call`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone_number: phoneNumber })
+                });
+                
+                if (!prepareResponse.ok) {
+                    throw new Error(`Prepare call failed: ${prepareResponse.statusText}`);
+                }
+                
+                const prepareData = await prepareResponse.json();
+                log('✓ Call prepared successfully', 'success');
+                
+                // 3. Request microphone permission
                 log('Requesting microphone permission...', 'info');
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 log('Microphone permission granted!', 'success');
@@ -376,7 +407,7 @@
                 // Stop the test stream - LiveKit will create its own
                 stream.getTracks().forEach(track => track.stop());
                 
-                // 2. Get token from backend
+                // 4. Get token from backend
                 const requestBody = {
                     user_identity: participantIdentity
                 };
@@ -403,7 +434,7 @@
                 log(`Token received for room: ${data.room_name}`, 'success');
                 log(`Connecting to: ${data.url}`, 'info');
                 
-                // 3. Create Room instance with audio settings
+                // 5. Create Room instance with audio settings
                 room = new Room({
                     adaptiveStream: true,
                     dynacast: true,
@@ -414,7 +445,7 @@
                     }
                 });
                 
-                // 4. Set up event listeners
+                // 6. Set up event listeners
                 room
                     .on(RoomEvent.Connected, () => {
                         log('✓ Connected to room!', 'success');
@@ -424,6 +455,7 @@
                     .on(RoomEvent.Disconnected, (reason) => {
                         log(`Disconnected: ${reason}`, 'info');
                         updateStatus('disconnected', 'Disconnected');
+                        document.getElementById('soundWave').style.display = 'none';
                         resetUI();
                     })
                     .on(RoomEvent.ParticipantConnected, (participant) => {
@@ -451,12 +483,23 @@
                                 document.body.appendChild(audioElement);
                                 document.getElementById('agentAudioStatus').textContent = '✓ Connected';
                                 log('✓ Agent audio stream attached and playing!', 'success');
+                                
+                                // Start animation when agent audio is received
+                                document.getElementById('soundWave').style.display = 'flex';
+                                document.getElementById('audioIndicator').classList.add('agent-speaking');
+                                
+                                // Monitor audio levels
+                                monitorAgentAudio(track);
                             }
                         }
                     })
                     .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
                         log(`Track unsubscribed: ${track.kind} from ${participant.identity}`, 'info');
                         track.detach();
+                        if (participant.isAgent) {
+                            document.getElementById('soundWave').style.display = 'none';
+                            document.getElementById('audioIndicator').classList.remove('agent-speaking');
+                        }
                     })
                     .on(RoomEvent.LocalTrackPublished, (publication) => {
                         log(`✓ Local track published: ${publication.kind}`, 'success');
@@ -465,12 +508,12 @@
                         log(`Media device error: ${error.message}`, 'error');
                     });
                 
-                // 5. Connect to room
+                // 7. Connect to room
                 log('Connecting to LiveKit room...', 'info');
                 await room.connect(data.url, data.token);
                 log('✓ Room connection established', 'success');
                 
-                // 6. Enable microphone and publish
+                // 8. Enable microphone and publish
                 log('Enabling and publishing microphone...', 'info');
                 await room.localParticipant.setMicrophoneEnabled(true);
                 
@@ -506,9 +549,17 @@
                 await room.disconnect();
                 room = null;
                 localAudioTrack = null;
+                document.getElementById('soundWave').style.display = 'none';
+                document.getElementById('audioIndicator').classList.remove('agent-speaking');
                 log('Disconnected', 'info');
             }
             resetUI();
+        }
+        
+        function monitorAgentAudio(track) {
+            // This function can be enhanced to monitor actual audio levels
+            // For now, it shows the animation when agent track is active
+            log('Monitoring agent audio...', 'info');
         }
         
         async function toggleMute() {

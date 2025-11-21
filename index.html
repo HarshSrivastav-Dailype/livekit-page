@@ -42,6 +42,32 @@
             font-size: 14px;
         }
         
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
         .agent-selector {
             margin-bottom: 25px;
         }
@@ -179,10 +205,25 @@
 <body>
     <div class="container">
         <h1>🎙️ LiveKit Multi-Agent</h1>
-        <p class="subtitle">Select an agent and start talking</p>
+        <p class="subtitle">Enter your identity and select an agent</p>
+        
+        <!-- Participant Identity Input -->
+        <div class="input-group">
+            <label for="participantIdentity">Participant Identity</label>
+            <input 
+                type="text" 
+                id="participantIdentity" 
+                placeholder="Enter your name or ID (e.g., user123)"
+                autocomplete="off"
+            >
+        </div>
         
         <!-- Agent Selection -->
         <div class="agent-selector" id="agentSelector">
+            <button class="agent-button" data-agent="null">
+                <strong>🤖 Generic Agent</strong>
+                <span>Connect without specific agent type</span>
+            </button>
             <button class="agent-button" data-agent="additional-document-agent">
                 <strong>👨‍💼 Additional Documents</strong>
                 <span>Technical help and assistance</span>
@@ -263,13 +304,20 @@
         });
         
         async function connect() {
+            // Get participant identity
+            const participantIdentity = document.getElementById('participantIdentity').value.trim();
+            if (!participantIdentity) {
+                alert('Please enter your participant identity!');
+                return;
+            }
+            
             if (!selectedAgent) {
-                alert('Please select an agent first!');
+                alert('Please select an agent!');
                 return;
             }
             
             updateStatus('connecting', 'Connecting...');
-            log('Requesting token from backend...', 'info');
+            log(`Connecting as: ${participantIdentity}`, 'info');
             
             try {
                 // 1. Request microphone permission first
@@ -281,12 +329,22 @@
                 stream.getTracks().forEach(track => track.stop());
                 
                 // 2. Get token from backend
+                const requestBody = {
+                    participant_identity: participantIdentity
+                };
+                
+                // Only add agent_name if it's not null
+                if (selectedAgent !== 'null') {
+                    requestBody.agent_name = selectedAgent;
+                    log(`Requesting token for agent: ${selectedAgent}`, 'info');
+                } else {
+                    log('Requesting token for generic agent (no specific agent)', 'info');
+                }
+                
                 const response = await fetch(`${BACKEND_URL}/token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        agent_name: selectedAgent 
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 if (!response.ok) {
@@ -301,7 +359,6 @@
                 room = new Room({
                     adaptiveStream: true,
                     dynacast: true,
-                    // Enable audio processing
                     audioCaptureDefaults: {
                         autoGainControl: true,
                         echoCancellation: true,
@@ -340,7 +397,6 @@
                         
                         if (track.kind === Track.Kind.Audio) {
                             if (participant.isAgent) {
-                                // Attach agent audio
                                 const audioElement = track.attach();
                                 audioElement.autoplay = true;
                                 audioElement.setAttribute('playsinline', '');
@@ -370,7 +426,6 @@
                 log('Enabling and publishing microphone...', 'info');
                 await room.localParticipant.setMicrophoneEnabled(true);
                 
-                // Get the local audio track
                 localAudioTrack = room.localParticipant.getTrackPublication(Track.Source.Microphone);
                 
                 if (localAudioTrack) {
@@ -380,7 +435,6 @@
                     log('⚠ Warning: Could not get microphone track', 'error');
                 }
                 
-                // Log all local tracks
                 const audioTracks = Array.from(room.localParticipant.audioTrackPublications.values());
                 log(`Local audio tracks: ${audioTracks.length}`, 'info');
                 
@@ -389,6 +443,7 @@
                 document.getElementById('muteBtn').style.display = 'block';
                 document.getElementById('disconnectBtn').style.display = 'block';
                 document.getElementById('agentSelector').style.opacity = '0.5';
+                document.getElementById('participantIdentity').disabled = true;
                 
             } catch (error) {
                 log(`❌ Error: ${error.message}`, 'error');
@@ -434,6 +489,7 @@
             document.getElementById('disconnectBtn').style.display = 'none';
             document.getElementById('audioIndicator').style.display = 'none';
             document.getElementById('agentSelector').style.opacity = '1';
+            document.getElementById('participantIdentity').disabled = false;
             document.getElementById('micStatus').textContent = 'Initializing...';
             document.getElementById('agentAudioStatus').textContent = 'Waiting...';
             isMuted = false;
@@ -446,13 +502,11 @@
             entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             logs.appendChild(entry);
             logs.scrollTop = logs.scrollHeight;
-            
-            // Also log to console for debugging
             console.log(`[${type}] ${message}`);
         }
         
         // Initial log
-        log('✓ Ready to connect. Select an agent and click Connect.', 'info');
+        log('✓ Ready to connect. Enter identity, select agent, and click Connect.', 'info');
         
         // Check browser compatibility
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {

@@ -629,6 +629,10 @@
                     <strong>💳 EMI Follow Ups</strong>
                     <span>EMI reminders and follow-ups</span>
                 </div>
+                <div class="agent-card" data-agent="traffic_police_agent" data-room-type="traffic_agent">
+                    <strong>🚔 Traffic Police</strong>
+                    <span>Traffic challan notifications</span>
+                </div>
             </div>
             
             <div class="status">
@@ -709,6 +713,46 @@
             
             <div class="logs" id="sipLogs"></div>
         </div>
+<!-- Section 3: Traffic Police SIP Call -->
+<div class="section">
+    <h2 class="section-title">🚔 Traffic Police SIP Call</h2>
+    <p class="section-subtitle">Make Traffic Police challan calls</p>
+
+    <div class="input-group">
+        <label for="trafficPhoneNumber">Phone Number</label>
+        <input type="tel" id="trafficPhoneNumber" placeholder="Enter 10-digit phone number" maxlength="10"
+            pattern="[0-9]{10}">
+    </div>
+
+    <div class="status">
+        <span class="status-dot disconnected" id="trafficSipStatusDot"></span>
+        <span id="trafficSipStatusText">Ready to call</span>
+    </div>
+
+    <div class="mic-indicator" id="trafficSipMicIndicator">
+        <div>
+            <div class="mic-circle" id="trafficSipMicCircle">
+                <div class="mic-icon">🚔</div>
+            </div>
+            <div class="sound-wave" id="trafficSipSoundWave" style="display:none;">
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+                <div class="sound-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-primary" id="trafficSipCallBtn" onclick="makeTrafficPoliceSipCall()">
+        Make Traffic Police Call
+    </button>
+    <button class="btn btn-danger" id="trafficSipEndBtn" onclick="endTrafficPoliceSipCall()" style="display:none;">
+        End Call
+    </button>
+
+    <div class="logs" id="trafficSipLogs"></div>
+</div>
     </div>
 
     <script type="module">
@@ -730,10 +774,15 @@
         window.toggleAgentMute = toggleAgentMute;
         window.makeSipCall = makeSipCall;
         window.endSipCall = endSipCall;
+        window.makeTrafficPoliceSipCalll;
         
+        window                ficPoliceSipCall = endTrafficPoliceSipCall;
         // Audio element for EMI Follow Ups agent
         let emiAudioElement = null;
         
+      e            nt room t          e)
+        let selecte            omType = null;
+    
         // Agent selection
         document.querySelectorAll('.agent-card').forEach(card => {
             card.addEventListener('click', () => {
@@ -768,7 +817,10 @@
                 document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('selected'));
                 card.classList.add('selected');
                 selectedAgent = card.dataset.agent;
-                logAgent(`Selected: ${card.querySelector('strong').textContent}`, 'info');
+                selectedAgentRoomType = card.dataset.roomType || null;  // Get room_type if specified
+                
+                const roomTypeInfo = selectedAgentRoomType ? ` (room_type: ${selectedAgentRoomType})` : '';
+                logAgent(`Selected: ${card.querySelector('strong').textContent}${roomTypeInfo}`, 'info');
             });
         });
         
@@ -788,11 +840,17 @@
                 logAgent('Microphone permission granted!', 'success');
                 stream.getTracks().forEach(track => track.stop());
                 
-                // Get token from backend
+                // Get token from backend with room_type for Traffic Police
+                const tokenPayload = { user_identity: selectedAgent };
+                if (selectedAgentRoomType) {
+                    tokenPayload.room_type = selectedAgentRoomType;
+                    logAgent(`🚔 Using Traffic Police agent routing`, 'info');
+                }
+                
                 const response = await fetch(`${BACKEND_URL}/token`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_identity: selectedAgent })
+                    body: JSON.stringify(tokenPayload)
                 });
                 
                 if (!response.ok) {
@@ -998,10 +1056,106 @@
             logs.appendChild(entry);
             logs.scrollTop = logs.scrollHeight;
         }
-        
-        // Initial logs
+
+
+                // Initial logs
         logAgent('✓ Ready to connect. Select an agent.', 'info');
         logSip('✓ Ready to make a call. Enter phone number.', 'info');
-    </script>
-</body>
-</html>
+        logTrafficSip('✓ Ready to make a Traffic Police call.', 'info');
+
+        // Traffic Police SIP Call Functions
+        let trafficSipCallActive = false;
+
+        async function makeTrafficPoliceSipCall() {
+            const phoneNumber = document.getElementById('trafficPhoneNumber').value.trim();
+            
+            if (!phoneNumber || phoneNumber.length !== 10 || !/^\d{10}$/.test(phoneNumber)) {
+                alert('Please enter a valid 10-digit phone number!');
+                return;
+            }
+            
+            const sipNumber = `+91${phoneNumber}`;
+            updateTrafficSipStatus('connecting', 'Initiating Traffic Police call...');
+            logTrafficSip(`🚔 Making Traffic Police call to: ${sipNumber}`, 'info');
+            
+            try {
+                // Use the dedicated Traffic Police endpoint
+                const response = await fetch(`${BACKEND_URL}/call/traffic-police`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sip_call_to: sipNumber })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Call failed: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                logTrafficSip(`✓ Traffic Police call initiated! Room: ${data.room_name}`, 'success');
+                updateTrafficSipStatus('connected', 'Call in progress');
+                
+                trafficSipCallActive = true;
+                document.getElementById('trafficSipCallBtn').style.display = 'none';
+                document.getElementById('trafficSipEndBtn').style.display = 'block';
+                document.getElementById('trafficSipMicIndicator').style.display = 'flex';
+                document.getElementById('trafficSipMicCircle').classList.add('speaking');
+                document.getElementById('trafficSipSoundWave').style.display = 'flex';
+                document.getElementById('trafficPhoneNumber').disabled = true;
+                
+            } catch (error) {
+                logTrafficSip(`❌ Error: ${error.message}`, 'error');
+                updateTrafficSipStatus('disconnected', 'Call failed');
+                resetTrafficSipUI();
+            }
+        }
+
+        async function endTrafficPoliceSipCall() {
+            const phoneNumber = document.getElementById('trafficPhoneNumber').value.trim();
+            
+            if (phoneNumber) {
+                const sipNumber = `+91${phoneNumber}`;
+                logTrafficSip('Calling disconnect webhook...', 'info');
+                
+                try {
+                    const response = await fetch(`http://13.203.175.232:8222/disconnect?phone=${encodeURIComponent(sipNumber)}`, {
+                        method: 'POST'
+                    });
+                    
+                    if (response.ok) {
+                        logTrafficSip('✓ Disconnect webhook called successfully', 'success');
+                    } else {
+                        logTrafficSip(`⚠️ Disconnect webhook returned status: ${response.status}`, 'info');
+                    }
+                } catch (error) {
+                    logTrafficSip(`⚠️ Failed to call disconnect webhook: ${error.message}`, 'error');
+                }
+            }
+            
+            logTrafficSip('Call ended', 'info');
+            updateTrafficSipStatus('disconnected', 'Call ended');
+            resetTrafficSipUI();
+        }
+
+        function updateTrafficSipStatus(state, text) {
+            document.getElementById('trafficSipStatusDot').className = `status-dot ${state}`;
+            document.getElementById('trafficSipStatusText').textContent = text;
+        }
+
+        function resetTrafficSipUI() {
+            trafficSipCallActive = false;
+            document.getElementById('trafficSipCallBtn').style.display = 'block';
+            document.getElementById('trafficSipEndBtn').style.display = 'none';
+            document.getElementById('trafficSipMicIndicator').style.display = 'none';
+            document.getElementById('trafficSipMicCircle').classList.remove('speaking');
+            document.getElementById('trafficSipSoundWave').style.display = 'none';
+            document.getElementById('trafficPhoneNumber').disabled = false;
+        }
+
+        function logTrafficSip(message, type = 'info') {
+            const logs = document.getElementById('trafficSipLogs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+        }
